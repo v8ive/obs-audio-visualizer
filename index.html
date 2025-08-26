@@ -2,131 +2,91 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Visualizer</title>
+    <title>Audio Input Test</title>
     <style>
-        /* --- You can customize these variables --- */
-        :root {
-            --bar-color: #00ffff; /* Color of the visualizer bars (cyan) */
-            --bar-gap: 4px;      /* Gap between bars */
-            --background-color: transparent;
-        }
-        /* ----------------------------------------- */
-
         body, html {
             margin: 0;
             padding: 0;
             height: 100%;
             width: 100%;
             overflow: hidden;
-            background-color: var(--background-color);
+            background-color: transparent;
             display: flex;
             justify-content: center;
             align-items: center;
-            flex-direction: column;
-            font-family: Arial, sans-serif;
-            color: #fff;
+            font-family: sans-serif;
+            color: white;
         }
-        #visualizerCanvas {
+        #message {
+            cursor: pointer;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            text-align: center;
+        }
+        canvas {
             position: absolute;
             bottom: 0;
             left: 0;
             width: 100%;
             height: 100%;
         }
-        #message {
-            z-index: 10;
-            padding: 20px;
-            background-color: rgba(0, 0, 0, 0.5);
-            border-radius: 10px;
-            cursor: pointer;
-            text-align: center;
-        }
     </style>
 </head>
 <body>
-
     <div id="message">
-        <h1>Click to Start Audio Capture</h1>
-        <p>You will be prompted to share your screen/desktop audio.</p>
+        <h1>Click to Test Microphone Input</h1>
     </div>
-
     <canvas id="visualizerCanvas"></canvas>
-
     <script>
         const messageEl = document.getElementById('message');
         const canvas = document.getElementById('visualizerCanvas');
         const canvasCtx = canvas.getContext('2d');
         let audioCtx;
-        let analyser;
-        let source;
 
-        async function startAudioCapture() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-
+        async function startMicCapture() {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true,
-                    audio: true
+                // This is the key change: using getUserMedia for microphone/line-in
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: true, // Requesting microphone access
+                    video: false
                 });
-
+                
                 messageEl.style.display = 'none';
-                source = audioCtx.createMediaStreamSource(stream);
-                analyser = audioCtx.createAnalyser();
+
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(stream);
+                const analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 256;
                 source.connect(analyser);
 
-                resizeCanvas();
+                function draw() {
+                    requestAnimationFrame(draw);
+                    const bufferLength = analyser.frequencyBinCount;
+                    const dataArray = new Uint8Array(bufferLength);
+                    analyser.getByteFrequencyData(dataArray);
+                    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+                    const barWidth = (canvas.width / bufferLength) * 1.5;
+                    let x = 0;
+                    for (let i = 0; i < bufferLength; i++) {
+                        const barHeight = (dataArray[i] / 255) * canvas.height;
+                        canvasCtx.fillStyle = '#00ffff';
+                        canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        x += barWidth + 2;
+                    }
+                }
                 draw();
 
             } catch (err) {
-                // THIS IS THE UPDATED PART FOR BETTER ERROR REPORTING
-                console.error("Error capturing audio:", err);
-                messageEl.innerHTML = `
-                    <h1>Permissions Error</h1>
-                    <p>The browser reported the following error:</p>
-                    <strong style="color: #ff8a80;">${err.name}: ${err.message}</strong>
-                    <p style="margin-top: 20px;">The most common causes are not checking the 'Share Audio' box or missing OS Screen Recording permissions for OBS.</p>
-                `;
-                messageEl.style.display = 'flex'; // Make sure the error is visible
+                messageEl.innerHTML = `<h1>Still Failed</h1><p>${err.name}: ${err.message}</p>`;
             }
         }
-
-        messageEl.addEventListener('click', startAudioCapture);
-
-        function resizeCanvas() {
+        
+        messageEl.addEventListener('click', startMicCapture);
+        window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resizeCanvas);
-
-        function draw() {
-            requestAnimationFrame(draw);
-            if (!analyser) return;
-
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            analyser.getByteFrequencyData(dataArray);
-            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-            const barWidth = (canvas.width / bufferLength) * 1.5;
-            let x = 0;
-            const barColor = getComputedStyle(document.documentElement).getPropertyValue('--bar-color').trim();
-
-            for (let i = 0; i < bufferLength; i++) {
-                const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
-                canvasCtx.fillStyle = barColor;
-                canvasCtx.fillRect(
-                    x,
-                    canvas.height - barHeight,
-                    barWidth,
-                    barHeight
-                );
-                x += barWidth + parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-gap').trim());
-            }
-        }
+        });
     </script>
 </body>
 </html>
