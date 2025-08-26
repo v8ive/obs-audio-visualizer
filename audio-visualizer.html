@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Visualizer</title>
+    <style>
+        /* --- You can customize these variables --- */
+        :root {
+            --bar-color: #00ffff; /* Color of the visualizer bars (cyan) */
+            --bar-gap: 4px;      /* Gap between bars */
+            --background-color: transparent;
+        }
+        /* ----------------------------------------- */
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: var(--background-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            font-family: Arial, sans-serif;
+            color: #fff;
+        }
+        #visualizerCanvas {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #message {
+            z-index: 10;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="message">
+        <h1>Click to Start Audio Capture</h1>
+        <p>You will be prompted to share your screen/desktop audio.</p>
+    </div>
+
+    <canvas id="visualizerCanvas"></canvas>
+
+    <script>
+        const messageEl = document.getElementById('message');
+        const canvas = document.getElementById('visualizerCanvas');
+        const canvasCtx = canvas.getContext('2d');
+        let audioCtx;
+        let analyser;
+        let source;
+
+        // Function to start audio capture
+        async function startAudioCapture() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            try {
+                // Prompt user to select screen/window for audio capture
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true, // required to be true for audio capture
+                    audio: true
+                });
+
+                // Hide the initial message
+                messageEl.style.display = 'none';
+
+                // Create an audio source from the stream
+                source = audioCtx.createMediaStreamSource(stream);
+
+                // Create an analyser
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256; // Determines the number of bars (fftSize / 2)
+
+                // Connect the source to the analyser
+                source.connect(analyser);
+                // Note: We don't connect to audioCtx.destination, so you don't hear the audio twice.
+
+                // Start the visualization loop
+                resizeCanvas();
+                draw();
+
+            } catch (err) {
+                console.error("Error capturing audio:", err);
+                messageEl.innerHTML = "<h1>Error</h1><p>Could not capture audio. Please ensure you grant permissions.</p>";
+            }
+        }
+
+        // Add click event listener to the message box
+        messageEl.addEventListener('click', startAudioCapture);
+
+        // Resize the canvas to fill the window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // The main drawing loop
+        function draw() {
+            // Schedule the next frame
+            requestAnimationFrame(draw);
+            
+            if (!analyser) return;
+
+            // Get the frequency data
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            // Clear the canvas
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // --- Drawing the bars ---
+            const barWidth = (canvas.width / bufferLength) * 1.5;
+            let x = 0;
+            const barColor = getComputedStyle(document.documentElement).getPropertyValue('--bar-color').trim();
+
+            for (let i = 0; i < bufferLength; i++) {
+                // The data value (0-255) determines bar height
+                const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
+
+                // Set the bar color
+                canvasCtx.fillStyle = barColor;
+
+                // Draw the bar
+                canvasCtx.fillRect(
+                    x,                      // x position
+                    canvas.height - barHeight, // y position (from the bottom)
+                    barWidth,               // width
+                    barHeight               // height
+                );
+
+                // Move to the next bar's position
+                x += barWidth + parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-gap').trim());
+            }
+        }
+    </script>
+</body>
+</html>
