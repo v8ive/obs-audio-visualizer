@@ -61,89 +61,69 @@
         let analyser;
         let source;
 
-        // Function to start audio capture
         async function startAudioCapture() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
 
             try {
-                // Prompt user to select screen/window for audio capture
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true, // required to be true for audio capture
+                    video: true,
                     audio: true
                 });
 
-                // Hide the initial message
                 messageEl.style.display = 'none';
-
-                // Create an audio source from the stream
                 source = audioCtx.createMediaStreamSource(stream);
-
-                // Create an analyser
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 256; // Determines the number of bars (fftSize / 2)
-
-                // Connect the source to the analyser
+                analyser.fftSize = 256;
                 source.connect(analyser);
-                // Note: We don't connect to audioCtx.destination, so you don't hear the audio twice.
 
-                // Start the visualization loop
                 resizeCanvas();
                 draw();
 
             } catch (err) {
+                // THIS IS THE UPDATED PART FOR BETTER ERROR REPORTING
                 console.error("Error capturing audio:", err);
-                messageEl.innerHTML = "<h1>Error</h1><p>Could not capture audio. Please ensure you grant permissions.</p>";
+                messageEl.innerHTML = `
+                    <h1>Permissions Error</h1>
+                    <p>The browser reported the following error:</p>
+                    <strong style="color: #ff8a80;">${err.name}: ${err.message}</strong>
+                    <p style="margin-top: 20px;">The most common causes are not checking the 'Share Audio' box or missing OS Screen Recording permissions for OBS.</p>
+                `;
+                messageEl.style.display = 'flex'; // Make sure the error is visible
             }
         }
 
-        // Add click event listener to the message box
         messageEl.addEventListener('click', startAudioCapture);
 
-        // Resize the canvas to fill the window
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // The main drawing loop
         function draw() {
-            // Schedule the next frame
             requestAnimationFrame(draw);
-            
             if (!analyser) return;
 
-            // Get the frequency data
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
-
-            // Clear the canvas
             canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // --- Drawing the bars ---
             const barWidth = (canvas.width / bufferLength) * 1.5;
             let x = 0;
             const barColor = getComputedStyle(document.documentElement).getPropertyValue('--bar-color').trim();
 
             for (let i = 0; i < bufferLength; i++) {
-                // The data value (0-255) determines bar height
                 const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
-
-                // Set the bar color
                 canvasCtx.fillStyle = barColor;
-
-                // Draw the bar
                 canvasCtx.fillRect(
-                    x,                      // x position
-                    canvas.height - barHeight, // y position (from the bottom)
-                    barWidth,               // width
-                    barHeight               // height
+                    x,
+                    canvas.height - barHeight,
+                    barWidth,
+                    barHeight
                 );
-
-                // Move to the next bar's position
                 x += barWidth + parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-gap').trim());
             }
         }
